@@ -49,10 +49,12 @@ def run_server():
         if http_method == 'GET':
 
             content = "Hello\r\n"
+
+            headers = f"Content-Length: {len(content)}"
             print("Sending response: " + content)
-            response = 'HTTP/1.1 200 OK\r\n\r\n' + content
+            response = f'HTTP/1.1 200 OK\r\n{headers}\r\n\r\n' + content
         else:
-            response = 'HTTP/1.1 405 Method Not Allowed\r\n\r\nAllow: GET'
+            response = 'HTTP/1.1 405 Method Not Allowed\r\nAllow: GET'
 
         client_socket.sendall(response.encode())
 
@@ -73,11 +75,12 @@ def packet_handler(packet):
         ip_layer = packet[IP]
         source, dest = ip_layer.src, ip_layer.dst
 
+
         direction = ""
         if tcp_layer.dport == SERVER_PORT:
-            direction = "Request"
+            direction = "REQUEST"
         elif tcp_layer.sport == SERVER_PORT:
-            direction = "Response"
+            direction = "RESPONSE"
 
         payload_size = len(tcp_layer.payload)
         if payload_size > 0:
@@ -88,7 +91,7 @@ def packet_handler(packet):
 def packet_counter():
     print(f"[Sniffer Process, PID: {multiprocessing.current_process().pid}] Starting up...")
 
-    bpf_filter = f"tcp and src port {SERVER_PORT}"
+    bpf_filter = f"tcp and (src port {SERVER_PORT} or dst port {SERVER_PORT})"
     sniff(iface="lo", filter=bpf_filter, prn=packet_handler, store=0)
 
 
