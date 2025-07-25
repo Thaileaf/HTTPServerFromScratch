@@ -48,7 +48,7 @@ def run_server():
 
         if http_method == 'GET':
 
-            content = "Hello\r\n"
+            content = "Hello"
 
             headers = f"Content-Length: {len(content)}"
             print("Sending response: " + content)
@@ -84,7 +84,7 @@ def packet_handler(packet):
 
         payload_size = len(tcp_layer.payload)
         if payload_size > 0:
-            print(f"{direction} Packet #{packet_count}: Seq={packet[TCP].seq}, {source} -> {dest}, Payload Size={payload_size} bytes")
+            print(f"{direction} Packet #{packet_count}: Seq={packet[TCP].seq}, {source}:{tcp_layer.sport} -> {dest}:{tcp_layer.dport}, Payload Size={payload_size} bytes")
     else:
         print(f"Packet #{packet_count}: {packet.summary()}")
 
