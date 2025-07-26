@@ -11,7 +11,11 @@ SERVER_PORT = 8080
 packet_count = 0
 
 
-
+# Cons of current version:
+    # Doesn't handle if request is not all contained in recv
+        # Will break if packets are delayed on real network. Works on local network tho
+        # Loses data on larger headers
+    # Not concurrent
 
 def run_server():
     print(f"[Server Process, PID: {multiprocessing.current_process().pid}] Starting up...")
