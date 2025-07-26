@@ -11,6 +11,8 @@ SERVER_PORT = 8080
 packet_count = 0
 
 
+
+
 def run_server():
     print(f"[Server Process, PID: {multiprocessing.current_process().pid}] Starting up...")
 
@@ -38,7 +40,7 @@ def run_server():
         
         client_socket, client_address = server_socket.accept()
         
-        request = client_socket.recv(1024).decode()
+        request = client_socket.recv(1024).decode() # Simple mechanism, needs polling for real requests over the network
         print(request)
         headers = request.split('\n')
         first_header_components = headers[0].split()
@@ -95,12 +97,12 @@ def packet_counter():
     sniff(iface="lo", filter=bpf_filter, prn=packet_handler, store=0)
 
 
-if __name__ == "__main__":
-    print(f"Main process {os.getpid()} starting")
-    server_process = multiprocessing.Process(target=run_server)
-    packet_process = multiprocessing.Process(target=packet_counter)
+# if __name__ == "__main__":
+print(f"Main process {os.getpid()} starting")
+server_process = multiprocessing.Process(target=run_server)
+packet_process = multiprocessing.Process(target=packet_counter)
 
-    # Start both processes
-    server_process.start()
-    packet_process.start()
+# Start both processes
+server_process.start()
+packet_process.start()
 

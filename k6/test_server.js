@@ -42,7 +42,23 @@ export const options = {
 };
 
 export default function () {
-  http.get('http://localhost:8080');
+    const params = {
+        cookies: { my_cookie: 'value' },
+        headers: { 
+            'X-MyHeader': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader2': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader3': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader4': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader5': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader6': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader7': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader8': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+            'X-MyHeader9': 'k6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosick6testasdpqiwheihqowiheqweoiasdaweqowiehqweiqoweihqoiwehqodhaosic',
+        },
+        redirects: 5,
+        tags: { k6test: 'yes' },
+    };
+  http.get('http://localhost:8080', params);
   sleep(1);
 }
 

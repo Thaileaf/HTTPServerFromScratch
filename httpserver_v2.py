@@ -6,6 +6,47 @@ import multiprocessing
 from scapy.all import sniff, TCP, IP
 import os
 
+
+class HTTPServer:
+    def __init__(self, listen_ip, listen_port):
+        self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listen_socket.bind((listen_ip, listen_port))
+
+        self.packet_count = 0
+        self.paths = []
+        
+
+        self.connections = [] # All accepted sockets
+        
+
+        pass
+
+    # def start(self):
+    #     pass
+
+    def handleRequest(self):
+        request_type, path, _ = 
+
+    def validatePath(self, path):
+        if self
+
+    def handleHeaders():
+        pass
+
+    def handleBody():
+        pass
+
+    def close(self):
+        self.listen_socket.close()
+
+    # def __del__(self):
+    #     '''
+    #     Clean up sockets and files
+    #     '''
+
+    #     pass
+
 SERVER_HOST = '0.0.0.0'
 SERVER_PORT = 8080
 packet_count = 0
