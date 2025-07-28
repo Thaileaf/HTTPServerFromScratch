@@ -6,7 +6,7 @@ import multiprocessing
 from scapy.all import sniff, TCP, IP
 import os
 import re
-
+from collections import deque
 # class Headers:
 #     def __init__(self):
 #         # Headers that can be used in both requests and responses.
@@ -79,6 +79,19 @@ import re
 
 # # class Headers
 
+class StreamFind:
+    def __init__(self, queue_size):
+        '''
+        Args:
+            queue_size (int): Size of queue in bytes
+        '''
+        self.queue_size = queue_size
+
+    # def 
+
+    
+
+
 STATUSES = {
     200: "200 OK",
     404: "404 Not Found"
@@ -100,7 +113,7 @@ class HTTPServer:
         self.paths = paths
         
 
-        self.connections = [] # All accepted sockets
+        self.connections = {} # All accepted sockets
         
 
         pass
@@ -110,7 +123,7 @@ class HTTPServer:
     def serveForever(self):
         print(f"Starting server for {self.server_ip}:{self.server_port}")
         while True:
-            client_socket, client_address = self.listen_socket.accept()
+            client_socket, client_address = self.acceptConnection()
             print(f"Connection initiated from {client_address}")
 
             # try:
@@ -118,32 +131,63 @@ class HTTPServer:
             # except Exception as e:
             #     print("Whoops request failed", e)
 
-                    
+
+    def acceptConnection(self) -> tuple[socket.socket, tuple[str, int]]:
+        client_socket, client_address = self.listen_socket.accept()
+        self.connections[client_socket] = client_address # Python sockets hashable?? Nice
+        return client_socket, client_address
+    
+    def closeConnection(self, client_socket):
+        print(f"Closing connection: {self.connections[client_socket]}")
+        del self.connections[client_socket]
+        client_socket.close()
+
+    
 
     def handleRequest(self, client_socket):
         CLRF = b'\r\n\r\n' 
         raw_headers = bytearray() # Stores incoming request and header
         raw_body = bytearray() # Stores body
+
+        buffer = deque(maxlen=4)
+
         # Receive loop
         while True: 
-            incoming = client_socket.recv(4096)
-            
+            incoming = client_socket.recv(50) 
+            header_end = -1
+            if DEBUG: print("Incoming bytes:", incoming)
+
             # Check clrf for end of headers
-            header_end = incoming.find(CLRF)
+            # header_end = incoming.find(CLRF) # TODO: Handle what happens if CLRF gets cut off! Implement sliding window
+            for i, byte in enumerate(incoming):
+                buffer.append(byte)
+
+                def findCLRF(buffer):
+                    CLRF = b'\r\n\r\n'
+                    for i, byte in enumerate(buffer):
+                        if byte != CLRF[i]:
+                            return False
+                    return True
+                
+                if findCLRF(buffer):
+                    header_end = i
+                    break
+                    
+
             if header_end != -1: 
                 break
             else:
-                raw_headers.append(incoming)
+                raw_headers += incoming
 
-        # Split data appropriately between body headers
-        split_incoming = incoming.split(CLRF, 1)
-        print(split_incoming)
 
-        raw_headers.extend(split_incoming[0])
-        raw_body.extend(split_incoming[1])
+        raw_headers.extend(incoming[:header_end + 1])
+        raw_body.extend(incoming[header_end + 1:])
+        print(raw_headers)
+        print(raw_body)
 
         # Decode Headers
-        headers = raw_headers.decode().split('\n')
+        headers = raw_headers.decode().split('\r\n')
+        print(headers)
         
         # Request line
         request_line_arr = headers[0].split(" ")
@@ -153,16 +197,22 @@ class HTTPServer:
         method, path, version = request_line_arr # Version not used yet...
         
         # Validations
-        self.validatePath(path)
+        if not self.validatePath(path):
+            self.handle_404(client_socket)
+            return
+
         parsed_headers = self.parseReqHeaders(headers[1:])
 
-        # Finally Handling the request
-
+      
         if method == "GET":
             self.handleGET(path, client_socket, parsed_headers)
-
+            return
         elif method == "POST":
             self.handlePOST(path, parsed_headers)
+            return
+
+  
+            
 
     def handleGET(self, path, client_socket, headers):
         headers = {
@@ -174,12 +224,17 @@ class HTTPServer:
         if DEBUG: print("GET Response is:", response)
 
         client_socket.sendall(response)
-        client_socket.close()
+        self.closeConnection(client_socket)
 
 
 
     def handlePOST(self, path, headers):
         pass
+
+    def handle_404(self, client_socket):
+        response = self.craftResponse(404, {}, "404 resources not found")
+        client_socket.sendall(response)
+        self.closeConnection(client_socket)
 
     def craftResponse(self, code: int, headers: dict[str,str], content):
         '''
@@ -193,22 +248,28 @@ class HTTPServer:
             header_lines.append(f"{key}: {value}")
         header_str = "\r\n".join(header_lines)
             
-        print("Crafting response: " + content)
         response = (f'HTTP/1.1 {STATUSES[code]}\r\n{header_str}\r\n\r\n').encode('utf-8') + content_bytes
+        print("Crafting response: ", response)
         return response
         
     
 
-    def validatePath(self, path):
+    def validatePath(self, path) -> bool:
         if path not in self.paths:
-            raise Exception("Path Not Found")
+            if DEBUG: print("Cannot find path ", path)
+            return False
+        return True
 
-    def parseReqHeaders(self, headers):
+    def parseReqHeaders(self, headers) -> dict[str, str]:
+        '''
+        Parses a list of header strings into a dictionary
+        '''
         parsed_headers = {}
         for header in headers:
+            if not header: continue
             split_header = header.split(": ") 
             if len(split_header) != 2:
-                raise Exception("Malformed header")
+                raise Exception("Malformed header:", header)
             
             parsed_headers[split_header[0]] = split_header[1]
 
@@ -233,19 +294,7 @@ SERVER_PORT = 8080
 # packet_count = 0
 
 def run_server():
-    # print(f"[Server Process, PID: {multiprocessing.current_process().pid}] Starting up...")
-
-    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # server_socket.bind((SERVER_HOST, SERVER_PORT))
-
-    # server_socket.listen(5)
-
-    # print(f'Listening on port {SERVER_PORT} ...') # if all goes well, we will print that we have started listening on a specific port
-
-    # Clean up socket
+  
     server = HTTPServer(SERVER_HOST, SERVER_PORT,paths={"/":"True:)"})
     def signal_handler(sig, frame):
         print('You pressed Ctrl+C!')
@@ -257,29 +306,7 @@ def run_server():
     server.serveForever()
 
 
-    # while True: 
-        
-    #     client_socket, client_address = server_socket.accept()
-        
-    #     request = client_socket.recv(1024).decode()
-    #     print(request)
-    #     headers = request.split('\n')
-    #     first_header_components = headers[0].split()
 
-    #     http_method = first_header_components[0]
-    #     path = first_header_components[1]
-
-    #     if http_method == 'GET':
-
-    #         content = "Hello\r\n"
-    #         print("Sending response: " + content)
-    #         response = 'HTTP/1.1 200 OK\r\n\r\n' + content
-    #     else:
-    #         response = 'HTTP/1.1 405 Method Not Allowed\r\n\r\nAllow: GET'
-
-    #     client_socket.sendall(response.encode())
-
-    #     client_socket.close()
 
 
 run_server()
