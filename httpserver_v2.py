@@ -172,7 +172,6 @@ class HTTPServer:
                 if findCLRF(buffer):
                     header_end = i
                     break
-                    
 
             if header_end != -1: 
                 break
@@ -182,12 +181,12 @@ class HTTPServer:
 
         raw_headers.extend(incoming[:header_end + 1])
         raw_body.extend(incoming[header_end + 1:])
-        print(raw_headers)
-        print(raw_body)
+        if DEBUG: print("Raw headers:", raw_headers)
+        if DEBUG: print("Raw body:", raw_body)
 
         # Decode Headers
         headers = raw_headers.decode().split('\r\n')
-        print(headers)
+        if DEBUG: print("Decoded headers:", headers)
         
         # Request line
         request_line_arr = headers[0].split(" ")
@@ -202,7 +201,6 @@ class HTTPServer:
             return
 
         parsed_headers = self.parseReqHeaders(headers[1:])
-
       
         if method == "GET":
             self.handleGET(path, client_socket, parsed_headers)
