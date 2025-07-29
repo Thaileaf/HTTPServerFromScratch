@@ -6,6 +6,7 @@ import multiprocessing
 from scapy.all import sniff, TCP, IP
 import os
 import re
+import logging
 from collections import deque
 # class Headers:
 #     def __init__(self):
@@ -78,16 +79,18 @@ from collections import deque
 #         }
 
 # # class Headers
+DEBUG = True
 
-class StreamFind:
-    def __init__(self, queue_size):
-        '''
-        Args:
-            queue_size (int): Size of queue in bytes
-        '''
-        self.queue_size = queue_size
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
 
-    # def 
+logger = logging.getLogger('Web application')
+logger.addHandler(handler)
+if DEBUG:
+    logger.setLevel(logging.DEBUG)
+else:
+    logger.setLevel(logging.WARNING)
 
     
 
@@ -97,7 +100,6 @@ STATUSES = {
     404: "404 Not Found"
 }
 
-DEBUG = True
 
 class HTTPServer:
     def __init__(self, listen_ip: str, listen_port: int, 
@@ -118,18 +120,17 @@ class HTTPServer:
 
         pass
 
-    # def start(self):
-    #     pass
+    
     def serveForever(self):
         print(f"Starting server for {self.server_ip}:{self.server_port}")
         while True:
             client_socket, client_address = self.acceptConnection()
             print(f"Connection initiated from {client_address}")
 
-            # try:
-            self.handleRequest(client_socket)
-            # except Exception as e:
-            #     print("Whoops request failed", e)
+            try:
+                self.handleRequest(client_socket)
+            except Exception as e:
+                print("Whoops request failed", e)
 
 
     def acceptConnection(self) -> tuple[socket.socket, tuple[str, int]]:
@@ -155,7 +156,7 @@ class HTTPServer:
         while True: 
             incoming = client_socket.recv(50) 
             header_end = -1
-            if DEBUG: print("Incoming bytes:", incoming)
+            logger.debug("Incoming bytes: %s", incoming)
 
             # Check clrf for end of headers
             # header_end = incoming.find(CLRF) # TODO: Handle what happens if CLRF gets cut off! Implement sliding window
@@ -181,12 +182,12 @@ class HTTPServer:
 
         raw_headers.extend(incoming[:header_end + 1])
         raw_body.extend(incoming[header_end + 1:])
-        if DEBUG: print("Raw headers:", raw_headers)
-        if DEBUG: print("Raw body:", raw_body)
+        logger.debug("Raw headers: %s", raw_headers)
+        logger.debug("Raw body: %s", raw_body)
 
         # Decode Headers
         headers = raw_headers.decode().split('\r\n')
-        if DEBUG: print("Decoded headers:", headers)
+        logger.debug("Decoded headers: %s", headers)
         
         # Request line
         request_line_arr = headers[0].split(" ")
@@ -219,7 +220,7 @@ class HTTPServer:
         }
         response = self.craftResponse(200, headers, "What's up")
 
-        if DEBUG: print("GET Response is:", response)
+        logger.debug("GET Response is: %s", response)
 
         client_socket.sendall(response)
         self.closeConnection(client_socket)
@@ -247,14 +248,14 @@ class HTTPServer:
         header_str = "\r\n".join(header_lines)
             
         response = (f'HTTP/1.1 {STATUSES[code]}\r\n{header_str}\r\n\r\n').encode('utf-8') + content_bytes
-        print("Crafting response: ", response)
+        logger.debug("Crafting response: %s", response)
         return response
         
     
 
     def validatePath(self, path) -> bool:
         if path not in self.paths:
-            if DEBUG: print("Cannot find path ", path)
+            logger.debug("Cannot find path %s", path)
             return False
         return True
 
