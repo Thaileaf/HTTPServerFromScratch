@@ -8,82 +8,44 @@ import os
 import re
 import logging
 from collections import deque
-# class Headers:
-#     def __init__(self):
-#         # Headers that can be used in both requests and responses.
-#         self.general_headers = {
-#             "Cache-Control": None,
-#             "Connection": None,
-#             "Date": None,
-#             "Pragma": None,
-#             "Transfer-Encoding": None,
-#             "Upgrade": None,
-#             "Via": None,
-#         }
 
-#         # Headers that are specific to client requests.
-#         self.request_headers = {
-#             "Accept": None,
-#             "Accept-Charset": None,
-#             "Accept-Encoding": None,
-#             "Accept-Language": None,
-#             "Authorization": None,
-#             "Cookie": None,
-#             "Expect": None,
-#             "From": None,
-#             "Host": None,
-#             "If-Match": None,
-#             "If-Modified-Since": None,
-#             "If-None-Match": None,
-#             "If-Range": None,
-#             "If-Unmodified-Since": None,
-#             "Range": None,
-#             "Referer": None,
-#             "User-Agent": None,
-#         }
+import logging
 
-#         # Headers that are specific to server responses.
-#         self.response_headers = {
-#             "ETag": None,
-#             "Location": None,
-#             "Proxy-Authenticate": None,
-#             "Retry-After": None,
-#             "Server": None,
-#             "Set-Cookie": None,
-#             "Vary": None,
-#             "WWW-Authenticate": None,
-#         }
+class CustomFormatter(logging.Formatter):
+    """Custom formatter to add colors to logging output."""
 
-#         # Headers describing the payload body (Representation Headers).
-#         self.entity_headers = {
-#             "Content-Encoding": None,
-#             "Content-Language": None,
-#             "Content-Length": None,
-#             "Content-Location": None,
-#             "Content-MD5": None,
-#             "Content-Range": None,
-#             "Content-Type": None,
-#             "Expires": None,
-#             "Last-Modified": None,
-#         }
-        
-#         # Common non-standard, security, or other notable headers.
-#         self.additional_headers = {
-#             "Content-Security-Policy": None,
-#             "DNT": None,
-#             "Origin": None,
-#             "Strict-Transport-Security": None,
-#             "X-Forwarded-For": None,
-#             "X-Frame-Options": None,
-#             "X-Requested-With": None,
-#         }
+    # Define ANSI escape codes for colors
+    grey = "\x1b[38;20m"
+    green = "\x1b[32;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
 
-# # class Headers
+    # Define the format string
+    format_str = "%(asctime)s - %(name)s - %(levelname)-8s - " + reset + "%(message)s"
+
+    # Map log levels to format strings with colors
+    FORMATS = {
+        logging.DEBUG: green + format_str + reset,
+        logging.INFO: green + format_str + reset,
+        logging.WARNING: yellow + format_str + reset,
+        logging.ERROR: red + format_str + reset,
+        logging.CRITICAL: bold_red + format_str + reset
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+    
+
 DEBUG = True
 
 handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
+handler.setFormatter(CustomFormatter())
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# handler.setFormatter(formatter)
 
 logger = logging.getLogger('Web application')
 logger.addHandler(handler)
@@ -103,7 +65,8 @@ STATUSES = {
 
 class HTTPServer:
     def __init__(self, listen_ip: str, listen_port: int, 
-                 paths: dict[str, str], listen_queue=5):
+                 routes: dict[str, str], listen_queue=5):
+        
         self.server_ip = listen_ip
         self.server_port = listen_port
         self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -112,11 +75,10 @@ class HTTPServer:
         self.listen_socket.listen(listen_queue)
 
         self.packet_count = 0
-        self.paths = paths
+        self.routes = routes
         
 
         self.connections = {} # All accepted sockets
-        
 
         pass
 
@@ -130,7 +92,10 @@ class HTTPServer:
             try:
                 self.handleRequest(client_socket)
             except Exception as e:
-                print("Whoops request failed", e)
+                logger.exception(f"Whoops an error occurred with {client_address}")
+            finally:
+                if client_socket in self.connections:
+                    self.closeConnection(client_socket)
 
 
     def acceptConnection(self) -> tuple[socket.socket, tuple[str, int]]:
@@ -182,8 +147,8 @@ class HTTPServer:
 
         raw_headers.extend(incoming[:header_end + 1])
         raw_body.extend(incoming[header_end + 1:])
-        logger.debug("Raw headers: %s", raw_headers)
-        logger.debug("Raw body: %s", raw_body)
+        logger.debug("Raw request headers: %s", raw_headers)
+        logger.debug("Raw request body: %s", raw_body)
 
         # Decode Headers
         headers = raw_headers.decode().split('\r\n')
@@ -194,37 +159,115 @@ class HTTPServer:
         if len(request_line_arr) != 3:
                 raise Exception("Malformed HTTP request line")
         
-        method, path, version = request_line_arr # Version not used yet...
+        method, route, version = request_line_arr # TODO: Version not used yet...
         
         # Validations
-        if not self.validatePath(path):
+        if not self.validatePath(route):
             self.handle_404(client_socket)
             return
 
         parsed_headers = self.parseReqHeaders(headers[1:])
       
         if method == "GET":
-            self.handleGET(path, client_socket, parsed_headers)
-            return
+            self.handleGET(route, client_socket, parsed_headers)
+        elif method == "HEAD":
+            self.handleHEAD(route, client_socket, parsed_headers)
         elif method == "POST":
-            self.handlePOST(path, parsed_headers)
-            return
+            self.handlePOST(route, parsed_headers)
+        
+        self.closeConnection(client_socket)
 
-  
-            
 
-    def handleGET(self, path, client_socket, headers):
-        headers = {
-            "Test1": "Test",
-            "Test2": "Test"
+    
+    def readFile(self, route):
+        ''' Finds the corresponding path on the OS and returns file data encoded 
+        TODO: Could potentially optimize it future with a read semaphore and file descriptor
+        to avoid reopening files
+
+        Args:
+            route (str): URL route
+
+        Returns:
+            data (str): Read file from disk in bytes
+            headers (dict[str, str]): Additional headers from files
+        '''
+        # Translate route to path and read file as bytes
+        path = "public/" + self.routes[route]
+        logger.debug("File path is %s", path)
+        logger.debug("Path being read: %s", path)
+        with open(path, 'rb') as file: 
+            data = file.read()
+
+        # Determine any headers related to file
+        file_headers = {
+            # Enter default headers here
         }
-        response = self.craftResponse(200, headers, "What's up")
+        _, ext = os.path.splitext(path)
+        logger.debug("File ext is %s", ext)
+        file_headers['Content-Type'] = self.getMediaType(ext)
+
+        return data, file_headers
+    
+    def getMediaType(self, extension):
+        """
+        Returns the MIME type for a given file extension.
+        Uses a dictionary for efficient lookup and provides a default for unknown types.
+        """
+        # A dictionary mapping common file extensions to their MIME types
+        media_types = {
+            # Images 
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
+            ".ico": "image/vnd.microsoft.icon",
+
+            # Text and Documents 
+            ".html": "text/html",
+            ".htm": "text/html",
+            ".css": "text/css",
+            ".txt": "text/plain",
+            ".pdf": "application/pdf",
+
+            # Scripts and Data 
+            ".js": "application/javascript",
+            ".json": "application/json",
+            ".xml": "application/xml",
+            
+            # Archives 
+            ".zip": "application/zip",
+            ".tar": "application/x-tar",
+        }
+        
+        # Returns media type, octet stream if extension not found
+        return media_types.get(extension.lower(), "application/octet-stream")
+
+    def handleGET(self, route, client_socket, request_headers):
+        response_headers = {
+            "Thaileaf": "was here",
+        }
+
+        file_data, file_headers = self.readFile(route)
+        response_headers.update(file_headers)
+        response = self.craftResponse(200, response_headers, file_data)
 
         logger.debug("GET Response is: %s", response)
 
         client_socket.sendall(response)
-        self.closeConnection(client_socket)
 
+    def handleHEAD(self, path, client_socket, request_headers):
+        response_headers = {
+            "Thaileaf": "was here",
+        }
+
+        _, file_headers = self.readFile(path) # TODO only way to read the meta data is to read whole file. Fix future
+        response_headers.update(file_headers)
+        response = self.craftResponse(200, response_headers) 
+
+        logger.debug("HEAD Response is: %s", response)
+
+        client_socket.sendall(response)
 
 
     def handlePOST(self, path, headers):
@@ -235,26 +278,27 @@ class HTTPServer:
         client_socket.sendall(response)
         self.closeConnection(client_socket)
 
-    def craftResponse(self, code: int, headers: dict[str,str], content):
+    def craftResponse(self, code: int, headers: dict[str,str], data=b''):
         '''
         Craft responses for requests. Does not need to pass in content length header, calcs by default
         '''
-        # sending_headers = ...
-        content_bytes = content.encode('utf-8')
-        headers["Content-Length"] = str(len(content_bytes))
+        # content_bytes = content.encode('utf-8')
+        # data
+        if data:
+            headers["Content-Length"] = str(len(data))
         header_lines = []
         for key, value in headers.items():
             header_lines.append(f"{key}: {value}")
         header_str = "\r\n".join(header_lines)
             
-        response = (f'HTTP/1.1 {STATUSES[code]}\r\n{header_str}\r\n\r\n').encode('utf-8') + content_bytes
+        response = (f'HTTP/1.1 {STATUSES[code]}\r\n{header_str}\r\n\r\n').encode('utf-8') + data
         logger.debug("Crafting response: %s", response)
         return response
         
     
 
     def validatePath(self, path) -> bool:
-        if path not in self.paths:
+        if path not in self.routes:
             logger.debug("Cannot find path %s", path)
             return False
         return True
@@ -281,12 +325,7 @@ class HTTPServer:
         print("Closing server...")
         self.listen_socket.close()
 
-    # def __del__(self):
-    #     '''
-    #     Clean up sockets and files
-    #     '''
 
-    #     pass
 
 SERVER_HOST = '0.0.0.0'
 SERVER_PORT = 8080
@@ -294,7 +333,11 @@ SERVER_PORT = 8080
 
 def run_server():
   
-    server = HTTPServer(SERVER_HOST, SERVER_PORT,paths={"/":"True:)"})
+    open_routes = {
+        "/":"index.html", 
+        "/image.png": "image.png",
+        }
+    server = HTTPServer(SERVER_HOST, SERVER_PORT,routes=open_routes)
     def signal_handler(sig, frame):
         print('You pressed Ctrl+C!')
         server.close()

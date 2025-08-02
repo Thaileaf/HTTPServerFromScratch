@@ -1,5 +1,5 @@
 import http from 'k6/http';
-import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
+// import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 
 export const options = {
     // Thresholds must be a top-level property of options
@@ -8,14 +8,14 @@ export const options = {
             {
                 threshold: 'rate<.05',
                 abortOnFail: true,
-                delayAbortEval: '10s',
+                // delayAbortEval: '10s',
             },
             
         ],
         http_req_duration: [{
             threshold: 'p(95)<200',
             abortOnFail: true,
-            delayAbortEval: '10s'
+            // delayAbortEval: '10s'
         }], // 95% of requests should be below 200ms
     },
 
@@ -52,8 +52,8 @@ export default function () {
   http.get('http://localhost:8080', params);
 }
 
-export function handleSummary(data) {
-  return {
-    "summary_breakpoint.html": htmlReport(data),
-  };
-}
+// export function handleSummary(data) {
+//   return {
+//     "summary_breakpoint.html": htmlReport(data),
+//   };
+// }
