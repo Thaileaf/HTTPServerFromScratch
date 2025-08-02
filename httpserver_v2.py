@@ -195,7 +195,7 @@ class HTTPServer:
         path = "public/" + self.routes[route]
         logger.debug("File path is %s", path)
         logger.debug("Path being read: %s", path)
-        with open(path, 'rb') as file: 
+        with open(path, 'rb') as file: # TODO: Need to optimize so that we send small chunks of data at a time, instead of whole file at once
             data = file.read()
 
         # Determine any headers related to file
@@ -215,7 +215,7 @@ class HTTPServer:
         """
         # A dictionary mapping common file extensions to their MIME types
         media_types = {
-            # Images 
+            # Images 🖼️
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
             ".png": "image/png",
@@ -223,19 +223,30 @@ class HTTPServer:
             ".svg": "image/svg+xml",
             ".ico": "image/vnd.microsoft.icon",
 
-            # Text and Documents 
+            # Audio and Video 🎬
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".ogg": "audio/ogg",
+            ".mp4": "video/mp4",
+            ".webm": "video/webm",
+            ".mov": "video/quicktime",
+            ".ts": "video/mp2t", # HLS Segment
+
+            # Text and Documents 📄
             ".html": "text/html",
             ".htm": "text/html",
             ".css": "text/css",
             ".txt": "text/plain",
             ".pdf": "application/pdf",
 
-            # Scripts and Data 
+            # Scripts and Data ⚙️
             ".js": "application/javascript",
             ".json": "application/json",
             ".xml": "application/xml",
+            ".m3u8": "application/vnd.apple.mpegurl", # HLS Manifest
+            ".mpd": "application/dash+xml", # DASH Manifest
             
-            # Archives 
+            # Archives 📦
             ".zip": "application/zip",
             ".tar": "application/x-tar",
         }
@@ -271,6 +282,7 @@ class HTTPServer:
 
 
     def handlePOST(self, path, headers):
+        # Maybe I'll make it handle post in the future with proxying, for now I'll just put a 405 method not allowed
         pass
 
     def handle_404(self, client_socket):
@@ -336,6 +348,7 @@ def run_server():
     open_routes = {
         "/":"index.html", 
         "/image.png": "image.png",
+        "/video.mp4": "video.mp4"
         }
     server = HTTPServer(SERVER_HOST, SERVER_PORT,routes=open_routes)
     def signal_handler(sig, frame):
