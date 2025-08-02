@@ -119,7 +119,8 @@ class HTTPServer:
 
         # Receive loop
         while True: 
-            incoming = client_socket.recv(50) 
+            incoming = client_socket.recv(50) # TODO: Handle what happens if connection is open but no data is sent. Close connection...
+            if not incoming: return
             header_end = -1
             logger.debug("Incoming bytes: %s", incoming)
 
@@ -175,7 +176,7 @@ class HTTPServer:
         elif method == "POST":
             self.handlePOST(route, parsed_headers)
         
-        self.closeConnection(client_socket)
+        # self.closeConnection(client_socket)
 
 
     
