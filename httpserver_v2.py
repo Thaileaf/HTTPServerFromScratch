@@ -64,6 +64,8 @@ STATUSES = {
 
 
 class HTTPServer:
+    """A simple HTTP server that serves static content"""
+
     def __init__(self, listen_ip: str, listen_port: int, 
                  routes: dict[str, str], listen_queue=5):
         
@@ -80,45 +82,58 @@ class HTTPServer:
 
         self.connections = {} # All accepted sockets
 
-        pass
 
     
-    def serveForever(self):
+    def serve_forever(self):
+        """ Core running loop, handles incoming connections and passes to request handler """
+
         print(f"Starting server for {self.server_ip}:{self.server_port}")
         while True:
-            client_socket, client_address = self.acceptConnection()
+            client_socket, client_address = self.accept_connection()
             print(f"Connection initiated from {client_address}")
 
             try:
-                self.handleRequest(client_socket)
-            except Exception as e:
+                self.handle_request(client_socket)
+            except Exception:
                 logger.exception(f"Whoops an error occurred with {client_address}")
             finally:
                 if client_socket in self.connections:
-                    self.closeConnection(client_socket)
+                    self.close_connection(client_socket)
 
 
-    def acceptConnection(self) -> tuple[socket.socket, tuple[str, int]]:
+    def accept_connection(self) -> tuple[socket.socket, tuple[str, int]]:
+        """ Accepts a socket connection, adds it to own socket list """
+
         client_socket, client_address = self.listen_socket.accept()
         self.connections[client_socket] = client_address # Python sockets hashable?? Nice
         return client_socket, client_address
     
-    def closeConnection(self, client_socket):
+    def close_connection(self, client_socket):
+        """ Closes a connection, cleans up from own socket list """
+
         print(f"Closing connection: {self.connections[client_socket]}")
-        del self.connections[client_socket]
-        client_socket.close()
+        try:
+            client_socket.close()
+            del self.connections[client_socket]
+        except:
+            logger.exception("Could not close socket and clean up properly")
+
 
     
 
-    def handleRequest(self, client_socket):
-        CLRF = b'\r\n\r\n' 
+    def handle_request(self, client_socket):
+        """ Handles a request from a single socket """
+        if not client_socket:
+            logger.exception("Client socket does not exist?")
+
+        CLRF = b'\r\n\r\n'
         raw_headers = bytearray() # Stores incoming request and header
         raw_body = bytearray() # Stores body
 
         buffer = deque(maxlen=4)
 
         # Receive loop
-        while True: 
+        while True:
             incoming = client_socket.recv(50) # TODO: Handle what happens if connection is open but no data is sent. Close connection...
             if not incoming: return
             header_end = -1
@@ -126,21 +141,24 @@ class HTTPServer:
 
             # Check clrf for end of headers
             # header_end = incoming.find(CLRF) # TODO: Handle what happens if CLRF gets cut off! Implement sliding window
+
+            # Here is the sliding window implementation. Just a simple circular queue
             for i, byte in enumerate(incoming):
                 buffer.append(byte)
 
-                def findCLRF(buffer):
+                def find_CLRF(buffer):
+                    """ Compares bytes to find CLRF from buffer """
                     CLRF = b'\r\n\r\n'
                     for i, byte in enumerate(buffer):
                         if byte != CLRF[i]:
                             return False
                     return True
                 
-                if findCLRF(buffer):
+                if find_CLRF(buffer):
                     header_end = i
                     break
 
-            if header_end != -1: 
+            if header_end != -1:
                 break
             else:
                 raw_headers += incoming
@@ -163,25 +181,25 @@ class HTTPServer:
         method, route, version = request_line_arr # TODO: Version not used yet...
         
         # Validations
-        if not self.validatePath(route):
+        if not self.validate_path(route):
             self.handle_404(client_socket)
             return
 
-        parsed_headers = self.parseReqHeaders(headers[1:])
+        parsed_headers = self.parse_req_headers(headers[1:])
       
         if method == "GET":
-            self.handleGET(route, client_socket, parsed_headers)
+            self.handle_get(route, client_socket, parsed_headers)
         elif method == "HEAD":
-            self.handleHEAD(route, client_socket, parsed_headers)
+            self.handle_head(route, client_socket, parsed_headers)
         elif method == "POST":
-            self.handlePOST(route, parsed_headers)
+            self.handle_post(route, parsed_headers)
         
-        # self.closeConnection(client_socket)
+        self.close_connection(client_socket) # Currently have to close each connection because no concurrency.
 
 
     
-    def readFile(self, route):
-        ''' Finds the corresponding path on the OS and returns file data encoded 
+    def read_file(self, route):
+        """ Finds the corresponding path on the OS and returns file data encoded 
         TODO: Could potentially optimize it future with a read semaphore and file descriptor
         to avoid reopening files
 
@@ -191,7 +209,7 @@ class HTTPServer:
         Returns:
             data (str): Read file from disk in bytes
             headers (dict[str, str]): Additional headers from files
-        '''
+        """
         # Translate route to path and read file as bytes
         path = "public/" + self.routes[route]
         logger.debug("File path is %s", path)
@@ -205,18 +223,18 @@ class HTTPServer:
         }
         _, ext = os.path.splitext(path)
         logger.debug("File ext is %s", ext)
-        file_headers['Content-Type'] = self.getMediaType(ext)
+        file_headers['Content-Type'] = self.get_media_type(ext)
 
         return data, file_headers
     
-    def getMediaType(self, extension):
+    def get_media_type(self, extension):
         """
         Returns the MIME type for a given file extension.
         Uses a dictionary for efficient lookup and provides a default for unknown types.
         """
         # A dictionary mapping common file extensions to their MIME types
         media_types = {
-            # Images 🖼️
+            # Images 
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
             ".png": "image/png",
@@ -224,7 +242,7 @@ class HTTPServer:
             ".svg": "image/svg+xml",
             ".ico": "image/vnd.microsoft.icon",
 
-            # Audio and Video 🎬
+            # Audio and Video 
             ".mp3": "audio/mpeg",
             ".wav": "audio/wav",
             ".ogg": "audio/ogg",
@@ -233,21 +251,21 @@ class HTTPServer:
             ".mov": "video/quicktime",
             ".ts": "video/mp2t", # HLS Segment
 
-            # Text and Documents 📄
+            # Text and Documents 
             ".html": "text/html",
             ".htm": "text/html",
             ".css": "text/css",
             ".txt": "text/plain",
             ".pdf": "application/pdf",
 
-            # Scripts and Data ⚙️
+            # Scripts and Data 
             ".js": "application/javascript",
             ".json": "application/json",
             ".xml": "application/xml",
             ".m3u8": "application/vnd.apple.mpegurl", # HLS Manifest
             ".mpd": "application/dash+xml", # DASH Manifest
             
-            # Archives 📦
+            # Archives 
             ".zip": "application/zip",
             ".tar": "application/x-tar",
         }
@@ -255,46 +273,47 @@ class HTTPServer:
         # Returns media type, octet stream if extension not found
         return media_types.get(extension.lower(), "application/octet-stream")
 
-    def handleGET(self, route, client_socket, request_headers):
+    def handle_get(self, route, client_socket, request_headers):
+        """ Sends back response to socket for GET requests """
         response_headers = {
             "Thaileaf": "was here",
         }
 
-        file_data, file_headers = self.readFile(route)
+        file_data, file_headers = self.read_file(route)
         response_headers.update(file_headers)
-        response = self.craftResponse(200, response_headers, file_data)
+        response = self.craft_response(200, response_headers, file_data)
 
         logger.debug("GET Response is: %s", response)
 
         client_socket.sendall(response)
 
-    def handleHEAD(self, path, client_socket, request_headers):
+    def handle_head(self, path, client_socket, request_headers):
+        """ Sends response bytes back to socket for HEAD requests """
         response_headers = {
             "Thaileaf": "was here",
         }
 
-        _, file_headers = self.readFile(path) # TODO only way to read the meta data is to read whole file. Fix future
+        _, file_headers = self.read_file(path) # TODO only way to read the meta data is to read whole file. Fix future
         response_headers.update(file_headers)
-        response = self.craftResponse(200, response_headers) 
-
+        response = self.craft_response(200, response_headers)
         logger.debug("HEAD Response is: %s", response)
 
         client_socket.sendall(response)
 
 
-    def handlePOST(self, path, headers):
+    def handle_post(self, path, headers):
         # Maybe I'll make it handle post in the future with proxying, for now I'll just put a 405 method not allowed
         pass
 
-    def handle_404(self, client_socket):
-        response = self.craftResponse(404, {}, "404 resources not found")
-        client_socket.sendall(response)
-        self.closeConnection(client_socket)
+    # def handle
 
-    def craftResponse(self, code: int, headers: dict[str,str], data=b''):
-        '''
-        Craft responses for requests. Does not need to pass in content length header, calcs by default
-        '''
+    def handle_404(self, client_socket):
+        """ Handles when a 404 occurs"""
+        response = self.craft_response(404, {}, "404 resources not found")
+        client_socket.sendall(response)
+
+    def craft_response(self, code: int, headers: dict[str,str], data=b''):
+        """ Craft responses for requests. Does not need to pass in content length header, calcs by default """
         # content_bytes = content.encode('utf-8')
         # data
         if data:
@@ -310,13 +329,13 @@ class HTTPServer:
         
     
 
-    def validatePath(self, path) -> bool:
+    def validate_path(self, path) -> bool:
         if path not in self.routes:
             logger.debug("Cannot find path %s", path)
             return False
         return True
 
-    def parseReqHeaders(self, headers) -> dict[str, str]:
+    def parse_req_headers(self, headers) -> dict[str, str]:
         '''
         Parses a list of header strings into a dictionary
         '''
@@ -331,7 +350,7 @@ class HTTPServer:
 
         return parsed_headers
 
-    def receiveBody():
+    def receive_body():
         pass
 
     def close(self):
@@ -359,7 +378,7 @@ def run_server():
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    server.serveForever()
+    server.serve_forever()
 
 
 
