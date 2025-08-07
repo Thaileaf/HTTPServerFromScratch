@@ -11,6 +11,10 @@ from collections import deque
 
 import logging
 
+LONG_LOGS = False
+DEBUG = True
+
+
 class CustomFormatter(logging.Formatter):
     """Custom formatter to add colors to logging output."""
 
@@ -33,19 +37,24 @@ class CustomFormatter(logging.Formatter):
         logging.ERROR: red + format_str + reset,
         logging.CRITICAL: bold_red + format_str + reset
     }
+    
+    max_len = 500
 
     def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-    
 
-DEBUG = True
+
+        record_copy = logging.makeLogRecord(record.__dict__)
+
+        log_fmt = self.FORMATS.get(record_copy.levelno)
+        formatter = logging.Formatter(log_fmt)
+        formatted =  formatter.format(record_copy)
+        if len(formatted) > self.max_len:
+            return formatted[:self.max_len] + f"...({len(formatted) - self.max_len} more chars)\n"
+        return formatted
+
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(CustomFormatter())
-# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# handler.setFormatter(formatter)
 
 logger = logging.getLogger('Web application')
 logger.addHandler(handler)
@@ -135,7 +144,7 @@ class HTTPServer:
         # Receive loop
         while True:
             incoming = client_socket.recv(50) # TODO: Handle what happens if connection is open but no data is sent. Close connection...
-            if not incoming: return
+            if not incoming: break # Closes if tcp socket does not send anything
             header_end = -1
             logger.debug("Incoming bytes: %s", incoming)
 
@@ -163,7 +172,7 @@ class HTTPServer:
             else:
                 raw_headers += incoming
 
-
+        
         raw_headers.extend(incoming[:header_end + 1])
         raw_body.extend(incoming[header_end + 1:])
         logger.debug("Raw request headers: %s", raw_headers)
